@@ -12,6 +12,19 @@ logger = get_logger("fetcher")
 class DataFetcher:
     """Level-2数据获取器"""
     
+    # 方向映射：中文 -> 英文
+    DIRECTION_MAP = {
+        '买盘': 'B',
+        '卖盘': 'S',
+        '中性盘': 'N',
+        'B': 'B',
+        'S': 'S',
+        'N': 'N',
+        'BUY': 'B',
+        'SELL': 'S',
+        'UNKNOWN': 'N'
+    }
+    
     def __init__(self, data_source: str = 'akshare', cache_enabled: bool = True, 
                  cache_dir: str = "data/cache"):
         """
@@ -80,10 +93,18 @@ class DataFetcher:
             import akshare as ak
             
             # 获取逐笔成交数据
-            logger.debug(f"Fetching from akshare: {symbol} {date}")
+            logger.debug(f"Fetching from akshare: {symbol} (real-time tick data)")
             
-            # akshare的逐笔成交接口
-            df = ak.stock_zh_a_tick_tx_js(symbol=symbol, date=date)
+            # akshare的逐笔成交接口（仅支持当天实时数据，不支持历史日期）
+            # 需要添加交易所前缀：深市以sz开头，沪市以sh开头
+            if symbol.startswith('0') or symbol.startswith('3'):
+                symbol_with_prefix = f'sz{symbol}'
+            elif symbol.startswith('6'):
+                symbol_with_prefix = f'sh{symbol}'
+            else:
+                symbol_with_prefix = symbol
+                
+            df = ak.stock_zh_a_tick_tx_js(symbol=symbol_with_prefix)
             
             if df.empty:
                 logger.warning(f"No data from akshare for {symbol} {date}")
@@ -108,13 +129,17 @@ class DataFetcher:
                     else:
                         timestamp = pd.to_datetime(timestamp_str)
                     
+                    # 映射方向字段：中文 -> 英文
+                    raw_direction = row.get('性质', 'N')
+                    direction = self.DIRECTION_MAP.get(str(raw_direction), 'N')
+                    
                     tick = Tick(
                         timestamp=timestamp,
                         symbol=symbol,
-                        price=float(row.get('成交价', 0)),
+                        price=float(row.get('成交价格', 0)),
                         volume=int(row.get('成交量', 0)),
-                        amount=float(row.get('成交额', 0)),
-                        direction=str(row.get('买卖方向', 'N')),
+                        amount=float(row.get('成交金额', 0)),
+                        direction=direction,
                         bid1_price=float(row.get('买一价', 0)),
                         bid1_vol=int(row.get('买一量', 0)),
                         ask1_price=float(row.get('卖一价', 0)),

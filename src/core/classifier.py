@@ -12,6 +12,8 @@ class OrderBook:
     """订单簿快照"""
     bid1_price: float
     bid1_vol: int
+    ask1_price: float
+    ask1_vol: int
     bid2_price: Optional[float] = None
     bid2_vol: Optional[int] = None
     bid3_price: Optional[float] = None
@@ -20,8 +22,6 @@ class OrderBook:
     bid4_vol: Optional[int] = None
     bid5_price: Optional[float] = None
     bid5_vol: Optional[int] = None
-    ask1_price: float
-    ask1_vol: int
     ask2_price: Optional[float] = None
     ask2_vol: Optional[int] = None
     ask3_price: Optional[float] = None
@@ -236,6 +236,8 @@ class TickClassifier:
         return OrderBook(
             bid1_price=tick.bid1_price,
             bid1_vol=tick.bid1_vol,
+            ask1_price=tick.ask1_price,
+            ask1_vol=tick.ask1_vol,
             bid2_price=getattr(tick, 'bid2_price', None),
             bid2_vol=getattr(tick, 'bid2_vol', None),
             bid3_price=getattr(tick, 'bid3_price', None),
@@ -244,8 +246,6 @@ class TickClassifier:
             bid4_vol=getattr(tick, 'bid4_vol', None),
             bid5_price=getattr(tick, 'bid5_price', None),
             bid5_vol=getattr(tick, 'bid5_vol', None),
-            ask1_price=tick.ask1_price,
-            ask1_vol=tick.ask1_vol,
             ask2_price=getattr(tick, 'ask2_price', None),
             ask2_vol=getattr(tick, 'ask2_vol', None),
             ask3_price=getattr(tick, 'ask3_price', None),

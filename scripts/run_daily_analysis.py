@@ -19,14 +19,18 @@ logger = get_logger("daily_analysis")
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
     """加载配置文件"""
-    with open(config_path, 'r', encoding='utf-8') as f:
+    # 使用相对于项目根目录的路径
+    full_path = project_root / config_path
+    with open(full_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     return config
 
 
 def load_symbols(symbols_path: str = "config/symbols.yaml") -> list:
     """加载股票列表"""
-    with open(symbols_path, 'r', encoding='utf-8') as f:
+    # 使用相对于项目根目录的路径
+    full_path = project_root / symbols_path
+    with open(full_path, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
     return data['symbols']
 
@@ -78,14 +82,20 @@ def analyze_symbol(symbol: str, date: str, config: dict, fetcher, preprocessor, 
         
         # 4. 统计信息
         stats = preprocessor.calculate_statistics(tick_data)
+        
+        # 检查是否有有效数据
+        if not stats or stats.get('count', 0) == 0:
+            logger.warning(f"数据统计为空，跳过分析")
+            return None
+        
         logger.info(f"数据统计:")
-        logger.info(f"  总成交量: {stats['total_volume']} 手")
-        logger.info(f"  总成交额: {stats['total_amount']:,.2f} 元")
-        logger.info(f"  平均价格: {stats['avg_price']:.2f}")
-        logger.info(f"  价格区间: {stats['min_price']:.2f} - {stats['max_price']:.2f}")
-        logger.info(f"  买单数量: {stats['buy_count']}")
-        logger.info(f"  卖单数量: {stats['sell_count']}")
-        logger.info(f"  大单数量: {stats['big_order_count']}")
+        logger.info(f"  总成交量: {stats.get('total_volume', 0)} 手")
+        logger.info(f"  总成交额: {stats.get('total_amount', 0):,.2f} 元")
+        logger.info(f"  平均价格: {stats.get('avg_price', 0):.2f}")
+        logger.info(f"  价格区间: {stats.get('min_price', 0):.2f} - {stats.get('max_price', 0):.2f}")
+        logger.info(f"  买单数量: {stats.get('buy_count', 0)}")
+        logger.info(f"  卖单数量: {stats.get('sell_count', 0)}")
+        logger.info(f"  大单数量: {stats.get('big_order_count', 0)}")
         
         # 5. 保存数据（如果是从新获取的）
         if not existing_data:

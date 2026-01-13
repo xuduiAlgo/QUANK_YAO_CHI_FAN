@@ -118,13 +118,16 @@ class DataValidator:
         验证买卖方向
         
         Args:
-            direction: 买卖方向
+            direction: 买卖方向（支持中文和英文）
             
         Returns:
             是否有效
         """
-        valid_directions = ['B', 'S', 'N', 'BUY', 'SELL', 'UNKNOWN']
-        if direction.upper() not in valid_directions:
+        # 支持中文和英文方向
+        valid_directions = ['B', 'S', 'N', 'BUY', 'SELL', 'UNKNOWN', 
+                          '买盘', '卖盘', '中性盘']
+        
+        if not direction or str(direction).upper() not in [d.upper() for d in valid_directions]:
             logger.warning(f"Invalid direction: {direction}")
             return False
         return True

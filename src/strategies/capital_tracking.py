@@ -1,5 +1,6 @@
 """资金追踪策略"""
 from typing import List, Dict
+from datetime import datetime
 from ..models.tick import Tick
 from ..models.result import CapitalAnalysisResult
 from ..models.order import SyntheticOrder
@@ -69,14 +70,51 @@ class CapitalTrackingStrategy(StrategyBase):
         # 初始化订单列表
         all_orders = []
         
+        # 调试：检查tick数据
+        big_count = 0
+        small_count = 0
+        invalid_direction_count = 0
+        
         # 遍历所有tick
         for tick in tick_data:
             # 步骤1: 分类
+            if tick.direction not in ['B', 'S', 'BUY', 'SELL']:
+                invalid_direction_count += 1
+                continue
+            
             label, weight = self.classifier.classify_tick(tick, None)
             
-            # 步骤2: 合成大单
-            synthetic_orders = self.synthetic_builder.feed(tick, label)
-            all_orders.extend(synthetic_orders)
+            # 统计
+            if label in ['AGG_BUY', 'AGG_SELL', 'DEF_BUY', 'DEF_SELL']:
+                big_count += 1
+            else:
+                small_count += 1
+            
+            # 步骤2: 处理订单
+            # 如果是大单，直接创建订单
+            if label in ['AGG_BUY', 'AGG_SELL', 'DEF_BUY', 'DEF_SELL']:
+                order = SyntheticOrder(
+                    start_time=tick.timestamp,
+                    end_time=tick.timestamp,
+                    symbol=tick.symbol,
+                    direction='BUY' if 'BUY' in label else 'SELL',
+                    total_volume=tick.volume,
+                    total_amount=tick.amount,
+                    vwap=tick.price,
+                    tick_count=1,
+                    order_type=label,
+                    confidence=weight,
+                    original_ticks=[tick]
+                )
+                all_orders.append(order)
+            else:
+                # 小单交给合成器处理
+                synthetic_orders = self.synthetic_builder.feed(tick, label)
+                all_orders.extend(synthetic_orders)
+        
+        if invalid_direction_count > 0:
+            logger.warning(f"Found {invalid_direction_count} ticks with invalid direction")
+        logger.debug(f"Tick classification: {big_count} big orders, {small_count} small orders")
         
         # 获取所有剩余的合成订单（交易日结束）
         all_orders.extend(self.synthetic_builder.get_flushed_orders(symbol))
@@ -102,11 +140,12 @@ class CapitalTrackingStrategy(StrategyBase):
         
         # 步骤7: 验证成本线
         chip_peak_price = chip_peaks[0][0] if chip_peaks else 0
-        validation_status = 'VALID'
+        chip_peak_volume = chip_peaks[0][1] if chip_peaks else 0
+        validation_status = True
         
         if weighted_cost > 0 and chip_peak_price > 0:
             is_valid = self.chip_analyzer.validate_cost_line(weighted_cost, chip_distribution)
-            validation_status = 'VALID' if is_valid else 'INVALID'
+            validation_status = is_valid
         
         # 步骤8: 计算支撑压力位
         sr = self.chip_analyzer.calculate_support_resistance(chip_distribution)
@@ -131,6 +170,7 @@ class CapitalTrackingStrategy(StrategyBase):
             algo_sell_amount=order_stats['algo_sell_amount'],
             concentration_ratio=concentration,
             chip_peak_price=chip_peak_price,
+            chip_peak_volume=chip_peak_volume,
             support_price=sr.get('support', 0.0),
             resistance_price=sr.get('resistance', 0.0),
             validation_status=validation_status,

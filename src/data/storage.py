@@ -47,10 +47,19 @@ class StorageManager:
                     bid1_vol INTEGER,
                     ask1_price REAL,
                     ask1_vol INTEGER,
-                    date TEXT NOT NULL,
-                    INDEX idx_symbol_date (symbol, date),
-                    INDEX idx_timestamp (timestamp)
+                    date TEXT NOT NULL
                 )
+            """)
+            
+            # 创建索引
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_symbol_date 
+                ON tick_data(symbol, date)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_timestamp 
+                ON tick_data(timestamp)
             """)
             
             # 创建分析结果表

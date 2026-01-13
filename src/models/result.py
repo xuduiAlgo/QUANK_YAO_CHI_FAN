@@ -25,13 +25,14 @@ class CapitalAnalysisResult:
     cost_ma_20: Optional[float]        # 20日主力成本均线
     
     # 净流向
-    net_flow: float                    # 净流向（元）
-    net_flow_ratio: float              # 净流向占比
+    net_flow: float                    # 净流向（比例）
     
     # 筹码分析
     concentration_ratio: float         # 筹码集中度
     chip_peak_price: float             # 筹码峰位价格
     chip_peak_volume: float            # 筹码峰位持仓量
+    support_price: float               # 支撑位价格
+    resistance_price: float            # 压力位价格
     
     # 验证状态
     validation_status: bool            # 成本线验证状态
@@ -91,7 +92,6 @@ class CapitalAnalysisResult:
             'cost_ma_10': self.cost_ma_10,
             'cost_ma_20': self.cost_ma_20,
             'net_flow': self.net_flow,
-            'net_flow_ratio': self.net_flow_ratio,
             'concentration_ratio': self.concentration_ratio,
             'chip_peak_price': self.chip_peak_price,
             'chip_peak_volume': self.chip_peak_volume,
@@ -120,7 +120,7 @@ class CapitalAnalysisResult:
   防御性卖出: {self.defensive_sell_amount:,.0f} 元
   算法买入:   {self.algo_buy_amount:,.0f} 元
   算法卖出:   {self.algo_sell_amount:,.0f} 元
-  净流向:     {self.net_flow:,.0f} 元 ({self.net_flow_ratio:.2%})
+  净流向:     {self.net_flow:.2%}
 
 【成本分析】
   主力成本:   {self.weighted_cost:.2f} 元
