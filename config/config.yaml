@@ -1,0 +1,39 @@
+# 主配置文件
+
+# 数据源配置
+data:
+  source: akshare  # akshare, wind, tushare
+  cache_enabled: true
+  cache_dir: data/cache
+
+# 算法参数
+algorithm:
+  window_sec: 30  # 时间窗口（秒）
+  synthetic_threshold: 500000  # 合成阈值（元）
+  
+# 分类参数
+classifier:
+  big_order_threshold: 100000  # 大单阈值（元）
+  wall_threshold: 10000  # 城墙单阈值（手）
+  
+# 均线参数
+moving_averages:
+  periods: [5, 10, 20]  # 均线周期
+  
+# 存储配置
+storage:
+  type: sqlite  # sqlite, mysql, postgresql
+  path: data/analysis.db
+  
+# 日志配置
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  file: logs/analysis.log
+  console: true
+  
+# 可视化配置
+visualization:
+  chart_width: 1200
+  chart_height: 800
+  theme: dark  # dark, light
+  save_format: png  # png, jpg, svg
