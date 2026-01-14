@@ -8,7 +8,7 @@ data:
 
 # 算法参数
 algorithm:
-  window_sec: 30  # 时间窗口（秒）
+  window_sec: 3  # 时间窗口（秒）
   synthetic_threshold: 10000000  # 合成阈值（元）
   
 # 分类参数

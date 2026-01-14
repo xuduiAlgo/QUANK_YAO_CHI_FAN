@@ -37,6 +37,9 @@ pydantic>=2.0.0
 # HTTP请求
 requests>=2.31.0
 
+# Web框架
+Flask>=3.0.0
+
 # 异步处理
 asyncio>=3.4.3
 

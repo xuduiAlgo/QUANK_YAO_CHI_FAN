@@ -1,5 +1,6 @@
 """数据存储管理"""
 import sqlite3
+import threading
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -11,7 +12,7 @@ logger = get_logger("storage")
 
 
 class StorageManager:
-    """存储管理器"""
+    """存储管理器（线程安全）"""
     
     def __init__(self, db_path: str = "data/analysis.db"):
         """
@@ -23,6 +24,9 @@ class StorageManager:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
+        # 创建线程锁，确保多线程安全
+        self._lock = threading.Lock()
+        
         # 初始化数据库
         self._init_db()
         
@@ -30,95 +34,96 @@ class StorageManager:
     
     def _init_db(self):
         """初始化数据库表结构"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
-            # 创建tick数据表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tick_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME NOT NULL,
-                    symbol TEXT NOT NULL,
-                    price REAL NOT NULL,
-                    volume INTEGER NOT NULL,
-                    amount REAL NOT NULL,
-                    direction TEXT NOT NULL,
-                    bid1_price REAL,
-                    bid1_vol INTEGER,
-                    ask1_price REAL,
-                    ask1_vol INTEGER,
-                    date TEXT NOT NULL
-                )
-            """)
-            
-            # 创建索引
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_symbol_date 
-                ON tick_data(symbol, date)
-            """)
-            
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_timestamp 
-                ON tick_data(timestamp)
-            """)
-            
-            # 创建分析结果表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS analysis_results (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    symbol TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    weighted_cost REAL,
-                    cost_ma_5 REAL,
-                    cost_ma_10 REAL,
-                    cost_ma_20 REAL,
-                    net_flow REAL,
-                    aggressive_buy_amount REAL,
-                    aggressive_sell_amount REAL,
-                    defensive_buy_amount REAL,
-                    defensive_sell_amount REAL,
-                    algo_buy_amount REAL,
-                    algo_sell_amount REAL,
-                    concentration_ratio REAL,
-                    chip_peak_price REAL,
-                    validation_status TEXT,
-                    total_orders INTEGER,
-                    big_order_count INTEGER,
-                    synthetic_order_count INTEGER,
-                    algo_order_count INTEGER,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(symbol, date)
-                )
-            """)
-            
-            # 创建历史成本表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS daily_costs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    symbol TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    weighted_cost REAL NOT NULL,
-                    cost_ma_5 REAL,
-                    cost_ma_10 REAL,
-                    cost_ma_20 REAL,
-                    UNIQUE(symbol, date)
-                )
-            """)
-            
-            # 创建配置表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS config (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            conn.commit()
+        with self._lock:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 创建tick数据表
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS tick_data (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp DATETIME NOT NULL,
+                        symbol TEXT NOT NULL,
+                        price REAL NOT NULL,
+                        volume INTEGER NOT NULL,
+                        amount REAL NOT NULL,
+                        direction TEXT NOT NULL,
+                        bid1_price REAL,
+                        bid1_vol INTEGER,
+                        ask1_price REAL,
+                        ask1_vol INTEGER,
+                        date TEXT NOT NULL
+                    )
+                """)
+                
+                # 创建索引
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_symbol_date 
+                    ON tick_data(symbol, date)
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_timestamp 
+                    ON tick_data(timestamp)
+                """)
+                
+                # 创建分析结果表
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS analysis_results (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        weighted_cost REAL,
+                        cost_ma_5 REAL,
+                        cost_ma_10 REAL,
+                        cost_ma_20 REAL,
+                        net_flow REAL,
+                        aggressive_buy_amount REAL,
+                        aggressive_sell_amount REAL,
+                        defensive_buy_amount REAL,
+                        defensive_sell_amount REAL,
+                        algo_buy_amount REAL,
+                        algo_sell_amount REAL,
+                        concentration_ratio REAL,
+                        chip_peak_price REAL,
+                        validation_status TEXT,
+                        total_orders INTEGER,
+                        big_order_count INTEGER,
+                        synthetic_order_count INTEGER,
+                        algo_order_count INTEGER,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(symbol, date)
+                    )
+                """)
+                
+                # 创建历史成本表
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS daily_costs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        weighted_cost REAL NOT NULL,
+                        cost_ma_5 REAL,
+                        cost_ma_10 REAL,
+                        cost_ma_20 REAL,
+                        UNIQUE(symbol, date)
+                    )
+                """)
+                
+                # 创建配置表
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS config (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                conn.commit()
     
     def save_tick_data(self, ticks: List[Tick], date: str) -> bool:
         """
-        保存tick数据
+        保存tick数据（线程安全）
         
         Args:
             ticks: Tick数据列表
@@ -132,38 +137,39 @@ class StorageManager:
             return False
         
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                # 准备数据
-                data = []
-                for tick in ticks:
-                    data.append((
-                        tick.timestamp.isoformat(),
-                        tick.symbol,
-                        tick.price,
-                        tick.volume,
-                        tick.amount,
-                        tick.direction,
-                        tick.bid1_price,
-                        tick.bid1_vol,
-                        tick.ask1_price,
-                        tick.ask1_vol,
-                        date
-                    ))
-                
-                # 批量插入
-                cursor.executemany("""
-                    INSERT OR REPLACE INTO tick_data 
-                    (timestamp, symbol, price, volume, amount, direction, 
-                     bid1_price, bid1_vol, ask1_price, ask1_vol, date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, data)
-                
-                conn.commit()
-                
-                logger.info(f"Saved {len(ticks)} tick records for {ticks[0].symbol} {date}")
-                return True
+            with self._lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    
+                    # 准备数据
+                    data = []
+                    for tick in ticks:
+                        data.append((
+                            tick.timestamp.isoformat(),
+                            tick.symbol,
+                            tick.price,
+                            tick.volume,
+                            tick.amount,
+                            tick.direction,
+                            tick.bid1_price,
+                            tick.bid1_vol,
+                            tick.ask1_price,
+                            tick.ask1_vol,
+                            date
+                        ))
+                    
+                    # 批量插入
+                    cursor.executemany("""
+                        INSERT OR REPLACE INTO tick_data 
+                        (timestamp, symbol, price, volume, amount, direction, 
+                         bid1_price, bid1_vol, ask1_price, ask1_vol, date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, data)
+                    
+                    conn.commit()
+                    
+                    logger.info(f"Saved {len(ticks)} tick records for {ticks[0].symbol} {date}")
+                    return True
         
         except Exception as e:
             logger.error(f"Failed to save tick data: {e}")
@@ -219,7 +225,7 @@ class StorageManager:
     
     def save_analysis_result(self, result: CapitalAnalysisResult) -> bool:
         """
-        保存分析结果
+        保存分析结果（线程安全）
         
         Args:
             result: 分析结果对象
@@ -228,34 +234,35 @@ class StorageManager:
             是否成功
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                cursor.execute("""
-                    INSERT OR REPLACE INTO analysis_results 
-                    (symbol, date, weighted_cost, cost_ma_5, cost_ma_10, cost_ma_20,
-                     net_flow, aggressive_buy_amount, aggressive_sell_amount,
-                     defensive_buy_amount, defensive_sell_amount,
-                     algo_buy_amount, algo_sell_amount, concentration_ratio,
-                     chip_peak_price, validation_status, total_orders,
-                     big_order_count, synthetic_order_count, algo_order_count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    result.symbol, result.date, result.weighted_cost,
-                    result.cost_ma_5, result.cost_ma_10, result.cost_ma_20,
-                    result.net_flow, result.aggressive_buy_amount,
-                    result.aggressive_sell_amount, result.defensive_buy_amount,
-                    result.defensive_sell_amount, result.algo_buy_amount,
-                    result.algo_sell_amount, result.concentration_ratio,
-                    result.chip_peak_price, result.validation_status,
-                    result.total_orders, result.big_order_count,
-                    result.synthetic_order_count, result.algo_order_count
-                ))
-                
-                conn.commit()
-                
-                logger.info(f"Saved analysis result for {result.symbol} {result.date}")
-                return True
+            with self._lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO analysis_results 
+                        (symbol, date, weighted_cost, cost_ma_5, cost_ma_10, cost_ma_20,
+                         net_flow, aggressive_buy_amount, aggressive_sell_amount,
+                         defensive_buy_amount, defensive_sell_amount,
+                         algo_buy_amount, algo_sell_amount, concentration_ratio,
+                         chip_peak_price, validation_status, total_orders,
+                         big_order_count, synthetic_order_count, algo_order_count)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        result.symbol, result.date, result.weighted_cost,
+                        result.cost_ma_5, result.cost_ma_10, result.cost_ma_20,
+                        result.net_flow, result.aggressive_buy_amount,
+                        result.aggressive_sell_amount, result.defensive_buy_amount,
+                        result.defensive_sell_amount, result.algo_buy_amount,
+                        result.algo_sell_amount, result.concentration_ratio,
+                        result.chip_peak_price, result.validation_status,
+                        result.total_orders, result.big_order_count,
+                        result.synthetic_order_count, result.algo_order_count
+                    ))
+                    
+                    conn.commit()
+                    
+                    logger.info(f"Saved analysis result for {result.symbol} {result.date}")
+                    return True
         
         except Exception as e:
             logger.error(f"Failed to save analysis result: {e}")
@@ -314,7 +321,7 @@ class StorageManager:
                        cost_ma_5: float = None, cost_ma_10: float = None,
                        cost_ma_20: float = None) -> bool:
         """
-        保存每日成本数据
+        保存每日成本数据（线程安全）
         
         Args:
             symbol: 股票代码
@@ -328,19 +335,20 @@ class StorageManager:
             是否成功
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                cursor.execute("""
-                    INSERT OR REPLACE INTO daily_costs 
-                    (symbol, date, weighted_cost, cost_ma_5, cost_ma_10, cost_ma_20)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (symbol, date, weighted_cost, cost_ma_5, cost_ma_10, cost_ma_20))
-                
-                conn.commit()
-                
-                logger.debug(f"Saved daily cost for {symbol} {date}")
-                return True
+            with self._lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO daily_costs 
+                        (symbol, date, weighted_cost, cost_ma_5, cost_ma_10, cost_ma_20)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (symbol, date, weighted_cost, cost_ma_5, cost_ma_10, cost_ma_20))
+                    
+                    conn.commit()
+                    
+                    logger.debug(f"Saved daily cost for {symbol} {date}")
+                    return True
         
         except Exception as e:
             logger.error(f"Failed to save daily cost: {e}")
@@ -430,7 +438,7 @@ class StorageManager:
     
     def delete_symbol_data(self, symbol: str) -> bool:
         """
-        删除指定股票的所有数据
+        删除指定股票的所有数据（线程安全）
         
         Args:
             symbol: 股票代码
@@ -439,26 +447,27 @@ class StorageManager:
             是否成功
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                # 删除tick数据
-                cursor.execute("DELETE FROM tick_data WHERE symbol = ?", (symbol,))
-                tick_count = cursor.rowcount
-                
-                # 删除分析结果
-                cursor.execute("DELETE FROM analysis_results WHERE symbol = ?", (symbol,))
-                result_count = cursor.rowcount
-                
-                # 删除成本数据
-                cursor.execute("DELETE FROM daily_costs WHERE symbol = ?", (symbol,))
-                cost_count = cursor.rowcount
-                
-                conn.commit()
-                
-                logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
-                          f"{cost_count} costs for {symbol}")
-                return True
+            with self._lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    
+                    # 删除tick数据
+                    cursor.execute("DELETE FROM tick_data WHERE symbol = ?", (symbol,))
+                    tick_count = cursor.rowcount
+                    
+                    # 删除分析结果
+                    cursor.execute("DELETE FROM analysis_results WHERE symbol = ?", (symbol,))
+                    result_count = cursor.rowcount
+                    
+                    # 删除成本数据
+                    cursor.execute("DELETE FROM daily_costs WHERE symbol = ?", (symbol,))
+                    cost_count = cursor.rowcount
+                    
+                    conn.commit()
+                    
+                    logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
+                              f"{cost_count} costs for {symbol}")
+                    return True
         
         except Exception as e:
             logger.error(f"Failed to delete symbol data: {e}")
@@ -466,7 +475,7 @@ class StorageManager:
     
     def delete_date_data(self, date: str) -> bool:
         """
-        删除指定日期的所有数据
+        删除指定日期的所有数据（线程安全）
         
         Args:
             date: 日期字符串 (格式: YYYYMMDD)
@@ -475,26 +484,27 @@ class StorageManager:
             是否成功
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                # 删除tick数据
-                cursor.execute("DELETE FROM tick_data WHERE date = ?", (date,))
-                tick_count = cursor.rowcount
-                
-                # 删除分析结果
-                cursor.execute("DELETE FROM analysis_results WHERE date = ?", (date,))
-                result_count = cursor.rowcount
-                
-                # 删除成本数据
-                cursor.execute("DELETE FROM daily_costs WHERE date = ?", (date,))
-                cost_count = cursor.rowcount
-                
-                conn.commit()
-                
-                logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
-                          f"{cost_count} costs for date {date}")
-                return True
+            with self._lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    
+                    # 删除tick数据
+                    cursor.execute("DELETE FROM tick_data WHERE date = ?", (date,))
+                    tick_count = cursor.rowcount
+                    
+                    # 删除分析结果
+                    cursor.execute("DELETE FROM analysis_results WHERE date = ?", (date,))
+                    result_count = cursor.rowcount
+                    
+                    # 删除成本数据
+                    cursor.execute("DELETE FROM daily_costs WHERE date = ?", (date,))
+                    cost_count = cursor.rowcount
+                    
+                    conn.commit()
+                    
+                    logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
+                              f"{cost_count} costs for date {date}")
+                    return True
         
         except Exception as e:
             logger.error(f"Failed to delete date data: {e}")
@@ -502,7 +512,7 @@ class StorageManager:
     
     def delete_symbol_date_data(self, symbol: str, date: str) -> bool:
         """
-        删除指定股票指定日期的数据
+        删除指定股票指定日期的数据（线程安全）
         
         Args:
             symbol: 股票代码
@@ -512,29 +522,30 @@ class StorageManager:
             是否成功
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                # 删除tick数据
-                cursor.execute("DELETE FROM tick_data WHERE symbol = ? AND date = ?", 
-                             (symbol, date))
-                tick_count = cursor.rowcount
-                
-                # 删除分析结果
-                cursor.execute("DELETE FROM analysis_results WHERE symbol = ? AND date = ?", 
-                             (symbol, date))
-                result_count = cursor.rowcount
-                
-                # 删除成本数据
-                cursor.execute("DELETE FROM daily_costs WHERE symbol = ? AND date = ?", 
-                             (symbol, date))
-                cost_count = cursor.rowcount
-                
-                conn.commit()
-                
-                logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
-                          f"{cost_count} costs for {symbol} {date}")
-                return True
+            with self._lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    
+                    # 删除tick数据
+                    cursor.execute("DELETE FROM tick_data WHERE symbol = ? AND date = ?", 
+                                 (symbol, date))
+                    tick_count = cursor.rowcount
+                    
+                    # 删除分析结果
+                    cursor.execute("DELETE FROM analysis_results WHERE symbol = ? AND date = ?", 
+                                 (symbol, date))
+                    result_count = cursor.rowcount
+                    
+                    # 删除成本数据
+                    cursor.execute("DELETE FROM daily_costs WHERE symbol = ? AND date = ?", 
+                                 (symbol, date))
+                    cost_count = cursor.rowcount
+                    
+                    conn.commit()
+                    
+                    logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
+                              f"{cost_count} costs for {symbol} {date}")
+                    return True
         
         except Exception as e:
             logger.error(f"Failed to delete symbol date data: {e}")
