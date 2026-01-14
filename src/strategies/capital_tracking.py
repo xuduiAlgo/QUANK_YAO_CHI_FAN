@@ -124,6 +124,12 @@ class CapitalTrackingStrategy(StrategyBase):
                    f"{len([o for o in all_orders if o.order_type in ['ALGO_TWAP', 'ALGO_VWAP']])} algo)")
         
         # 步骤3: 计算加权成本
+        # 调试：检查订单数据
+        if all_orders and len(all_orders) > 0:
+            sample_order = all_orders[0]
+            logger.debug(f"Sample order: price={sample_order.vwap}, volume={sample_order.total_volume}, "
+                        f"amount={sample_order.total_amount}, type={sample_order.order_type}")
+        
         weighted_cost = self.cost_calculator.calculate_weighted_cost(all_orders)
         
         # 步骤4: 计算订单统计
@@ -231,10 +237,9 @@ class CapitalTrackingStrategy(StrategyBase):
     
     def _estimate_float_cap(self, ticks: List[Tick]) -> float:
         """
-        估算流通市值
+        获取真实流通市值
         
-        这里使用简化版本：当日成交金额 / 换手率
-        如果没有换手率数据，返回0，净流向计算会跳过
+        从akshare获取真实流通市值，而不是使用估算
         
         Args:
             ticks: tick数据列表
@@ -245,15 +250,57 @@ class CapitalTrackingStrategy(StrategyBase):
         if not ticks:
             return 0.0
         
-        # 计算当日成交金额
-        total_amount = sum(t.amount for t in ticks)
+        symbol = ticks[0].symbol
         
-        # 这里简化处理，实际应该从数据源获取流通市值
-        # 返回一个足够大的值，使得净流向比例合理
-        # 假设换手率为5%
-        estimated_float_cap = total_amount / 0.05 if total_amount > 0 else 0
+        try:
+            import akshare as ak
+            
+            logger.debug(f"Fetching float market cap for {symbol}")
+            
+            # 获取个股信息
+            df = ak.stock_individual_info_em(symbol=symbol)
+            
+            if df.empty:
+                logger.warning(f"Empty stock info for {symbol}")
+                return 0.0
+            
+            # 查找流通市值字段
+            float_cap_str = None
+            for idx, row in df.iterrows():
+                item = str(row['item']).strip()
+                value = str(row['value']).strip()
+                
+                if '流通市值' in item or '流通股本' in item:
+                    float_cap_str = value
+                    break
+            
+            if not float_cap_str:
+                logger.warning(f"Float market cap not found in stock info for {symbol}")
+                # 如果获取失败，回退到估算方法
+                total_amount = sum(t.amount for t in ticks)
+                return total_amount / 0.05 if total_amount > 0 else 0
+            
+            # 解析流通市值（格式可能是 "123.45亿" 或 "1234567890"）
+            float_cap_str = float_cap_str.replace(',', '').replace('，', '')
+            
+            if '亿' in float_cap_str:
+                # 单位是亿，转换为元
+                float_cap = float(float_cap_str.replace('亿', '')) * 100000000
+            elif '万' in float_cap_str:
+                # 单位是万，转换为元
+                float_cap = float(float_cap_str.replace('万', '')) * 10000
+            else:
+                # 直接是元
+                float_cap = float(float_cap_str)
+            
+            logger.debug(f"Float market cap for {symbol}: {float_cap:,.2f} 元")
+            return float_cap
         
-        return estimated_float_cap
+        except Exception as e:
+            logger.error(f"Failed to fetch float market cap for {symbol}: {e}")
+            # 如果获取失败，回退到估算方法
+            total_amount = sum(t.amount for t in ticks)
+            return total_amount / 0.05 if total_amount > 0 else 0
     
     def update_ma_values(self, results: List[CapitalAnalysisResult]) -> List[CapitalAnalysisResult]:
         """

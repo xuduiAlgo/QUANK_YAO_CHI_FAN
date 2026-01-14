@@ -268,7 +268,9 @@ class DataPreprocessor:
             'count': len(ticks),
             'total_volume': sum(t.volume for t in ticks),
             'total_amount': sum(t.amount for t in ticks),
-            'avg_price': sum(t.amount for t in ticks) / sum(t.volume for t in ticks) if sum(t.volume for t in ticks) > 0 else 0,
+            # Volume单位是"手"，Amount单位是"元"
+            # 平均价格（元/股）= (Amount/Volume) / 100
+            'avg_price': (sum(t.amount for t in ticks) / sum(t.volume for t in ticks) / 100) if sum(t.volume for t in ticks) > 0 else 0,
             'min_price': min(t.price for t in ticks),
             'max_price': max(t.price for t in ticks),
             'buy_count': sum(1 for t in ticks if t.direction in ['B', 'BUY']),

@@ -9,11 +9,11 @@ data:
 # 算法参数
 algorithm:
   window_sec: 30  # 时间窗口（秒）
-  synthetic_threshold: 500000  # 合成阈值（元）
+  synthetic_threshold: 10000000  # 合成阈值（元）
   
 # 分类参数
 classifier:
-  big_order_threshold: 100000  # 大单阈值（元）
+  big_order_threshold: 1000000  # 大单阈值（元）
   wall_threshold: 10000  # 城墙单阈值（手）
   
 # 均线参数

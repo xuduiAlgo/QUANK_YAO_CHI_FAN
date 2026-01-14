@@ -12,21 +12,22 @@ class CostCalculator:
     
     def __init__(self):
         """初始化成本计算器"""
-        # 权重映射表
+        # 权重映射表（统一为1.0，避免权重偏差扭曲净流向计算）
+        # 说明：净流向应该反映真实的资金流动，不应该被订单类型权重扭曲
         self.weight_map = {
-            'AGG_BUY': 1.5,      # 攻击性买入 - 权重最高
-            'AGG_SELL': 1.5,     # 攻击性卖出
-            'DEF_BUY': 0.8,      # 防御性买入 - 权重较低
-            'DEF_SELL': 0.8,     # 防御性卖出
-            'ALGO_TWAP': 1.3,    # TWAP算法交易
-            'ALGO_VWAP': 1.3,    # VWAP算法交易
+            'AGG_BUY': 1.0,      # 攻击性买入
+            'AGG_SELL': 1.0,     # 攻击性卖出
+            'DEF_BUY': 1.0,      # 防御性买入
+            'DEF_SELL': 1.0,     # 防御性卖出
+            'ALGO_TWAP': 1.0,    # TWAP算法交易
+            'ALGO_VWAP': 1.0,    # VWAP算法交易
             'SYNTHETIC': 1.0,    # 普通合成订单
-            'ORIGINAL': 1.0,      # 原始大单
-            'SMALL_ORDER': 0.0,   # 小单 - 不参与计算
+            'ORIGINAL': 1.0,     # 原始大单
+            'SMALL_ORDER': 0.0,  # 小单 - 不参与计算
             'NOISE': 0.0,        # 噪音 - 不参与计算
         }
         
-        logger.info("CostCalculator initialized")
+        logger.info("CostCalculator initialized with unified weights (1.0)")
     
     def calculate_weighted_cost(self, orders: List[SyntheticOrder]) -> float:
         """
@@ -58,8 +59,11 @@ class CostCalculator:
                 if weight == 0:
                     continue
                 
+                # Volume单位是"手"，Amount单位是"元"
+                # 1手 = 100股，所以价格（元/股）= (Amount / 100) / Volume
+                # 或者简化为：价格 = (Amount / Volume) / 100
                 weighted_volume = order.total_volume * weight
-                weighted_amount = order.total_amount * weight
+                weighted_amount = (order.total_amount / 100) * weight  # 转换为"元/手"
                 
                 numerator += weighted_amount
                 denominator += weighted_volume
@@ -118,13 +122,34 @@ class CostCalculator:
         weighted_in = 0.0
         weighted_out = 0.0
         
+        # 调试：按类型统计
+        agg_buy_total = 0.0
+        agg_sell_total = 0.0
+        def_buy_total = 0.0
+        def_sell_total = 0.0
+        
         for order in orders:
-            weight = self.weight_map.get(order.order_type, 1.0) * order.confidence
+            # 直接使用weight_map中的权重（统一为1.0），不乘confidence
+            # 因为confidence是classifier返回的订单类型权重（如AGG_BUY=1.5, DEF_SELL=0.8）
+            # 但我们设计上要求净流向计算使用统一权重1.0，避免扭曲资金流动
+            weight = self.weight_map.get(order.order_type, 1.0)
             
             if order.direction == 'BUY':
                 weighted_in += order.total_amount * weight
+                
+                # 调试：按类型统计
+                if order.order_type == 'AGG_BUY':
+                    agg_buy_total += order.total_amount
+                elif order.order_type == 'DEF_BUY':
+                    def_buy_total += order.total_amount
             else:
                 weighted_out += order.total_amount * weight
+                
+                # 调试：按类型统计
+                if order.order_type == 'AGG_SELL':
+                    agg_sell_total += order.total_amount
+                elif order.order_type == 'DEF_SELL':
+                    def_sell_total += order.total_amount
         
         if float_market_cap == 0:
             logger.warning("Float market cap is zero")
@@ -133,6 +158,10 @@ class CostCalculator:
         net_flow = (weighted_in - weighted_out) / float_market_cap
         
         logger.debug(f"Net flow: {net_flow:.4%} (in: {weighted_in:.0f}, out: {weighted_out:.0f})")
+        logger.debug(f"  AGG_BUY: {agg_buy_total:.0f}, AGG_SELL: {agg_sell_total:.0f}")
+        logger.debug(f"  DEF_BUY: {def_buy_total:.0f}, DEF_SELL: {def_sell_total:.0f}")
+        logger.debug(f"  Total: {weighted_in:.0f} - {weighted_out:.0f} = {weighted_in - weighted_out:.0f}")
+        logger.debug(f"  Flow: {net_flow:.6%}")
         
         return net_flow
     

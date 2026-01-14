@@ -464,6 +464,82 @@ class StorageManager:
             logger.error(f"Failed to delete symbol data: {e}")
             return False
     
+    def delete_date_data(self, date: str) -> bool:
+        """
+        删除指定日期的所有数据
+        
+        Args:
+            date: 日期字符串 (格式: YYYYMMDD)
+        
+        Returns:
+            是否成功
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 删除tick数据
+                cursor.execute("DELETE FROM tick_data WHERE date = ?", (date,))
+                tick_count = cursor.rowcount
+                
+                # 删除分析结果
+                cursor.execute("DELETE FROM analysis_results WHERE date = ?", (date,))
+                result_count = cursor.rowcount
+                
+                # 删除成本数据
+                cursor.execute("DELETE FROM daily_costs WHERE date = ?", (date,))
+                cost_count = cursor.rowcount
+                
+                conn.commit()
+                
+                logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
+                          f"{cost_count} costs for date {date}")
+                return True
+        
+        except Exception as e:
+            logger.error(f"Failed to delete date data: {e}")
+            return False
+    
+    def delete_symbol_date_data(self, symbol: str, date: str) -> bool:
+        """
+        删除指定股票指定日期的数据
+        
+        Args:
+            symbol: 股票代码
+            date: 日期字符串 (格式: YYYYMMDD)
+        
+        Returns:
+            是否成功
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 删除tick数据
+                cursor.execute("DELETE FROM tick_data WHERE symbol = ? AND date = ?", 
+                             (symbol, date))
+                tick_count = cursor.rowcount
+                
+                # 删除分析结果
+                cursor.execute("DELETE FROM analysis_results WHERE symbol = ? AND date = ?", 
+                             (symbol, date))
+                result_count = cursor.rowcount
+                
+                # 删除成本数据
+                cursor.execute("DELETE FROM daily_costs WHERE symbol = ? AND date = ?", 
+                             (symbol, date))
+                cost_count = cursor.rowcount
+                
+                conn.commit()
+                
+                logger.info(f"Deleted {tick_count} ticks, {result_count} results, "
+                          f"{cost_count} costs for {symbol} {date}")
+                return True
+        
+        except Exception as e:
+            logger.error(f"Failed to delete symbol date data: {e}")
+            return False
+    
     def get_statistics(self) -> Dict[str, Any]:
         """
         获取数据库统计信息

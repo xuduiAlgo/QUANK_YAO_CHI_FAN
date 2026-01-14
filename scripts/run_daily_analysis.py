@@ -35,12 +35,13 @@ def load_symbols(symbols_path: str = "config/symbols.yaml") -> list:
     return data['symbols']
 
 
-def analyze_symbol(symbol: str, date: str, config: dict, fetcher, preprocessor, storage, strategy):
+def analyze_symbol(symbol: str, name: str, date: str, config: dict, fetcher, preprocessor, storage, strategy):
     """
     分析单个股票
     
     Args:
         symbol: 股票代码
+        name: 股票名称
         date: 日期
         config: 配置字典
         fetcher: 数据获取器
@@ -52,27 +53,21 @@ def analyze_symbol(symbol: str, date: str, config: dict, fetcher, preprocessor, 
         分析结果
     """
     logger.info(f"\n{'='*60}")
-    logger.info(f"开始分析: {symbol} - {date}")
+    logger.info(f"开始分析: {name} ({symbol}) - {date}")
     logger.info(f"{'='*60}")
     
     try:
-        # 1. 检查是否已有数据
-        existing_data = storage.load_tick_data(symbol, date)
-        if existing_data:
-            logger.info(f"从数据库加载已有数据: {len(existing_data)} 条记录")
-            tick_data = existing_data
-        else:
-            # 2. 获取数据
-            logger.info(f"从数据源获取数据...")
-            tick_data = fetcher.fetch_tick_data(symbol, date)
-            
-            if not tick_data:
-                logger.warning(f"未获取到数据: {symbol} {date}")
-                return None
-            
-            logger.info(f"获取到 {len(tick_data)} 条tick数据")
+        # 1. 从数据源获取数据（不使用缓存，强制重新获取）
+        logger.info(f"从数据源获取数据...")
+        tick_data = fetcher.fetch_tick_data(symbol, date, use_cache=False)
         
-        # 3. 数据预处理
+        if not tick_data:
+            logger.warning(f"未获取到数据: {symbol} {date}")
+            return None
+        
+        logger.info(f"获取到 {len(tick_data)} 条tick数据")
+        
+        # 2. 数据预处理
         logger.info(f"数据预处理...")
         tick_data = preprocessor.clean_tick_data(tick_data)
         tick_data = preprocessor.remove_duplicates(tick_data)
@@ -97,11 +92,10 @@ def analyze_symbol(symbol: str, date: str, config: dict, fetcher, preprocessor, 
         logger.info(f"  卖单数量: {stats.get('sell_count', 0)}")
         logger.info(f"  大单数量: {stats.get('big_order_count', 0)}")
         
-        # 5. 保存数据（如果是从新获取的）
-        if not existing_data:
-            storage.save_tick_data(tick_data, date)
+        # 3. 保存数据
+        storage.save_tick_data(tick_data, date)
         
-        # 6. 执行分析
+        # 4. 执行分析
         logger.info(f"执行资金分析...")
         result = strategy.analyze_day(symbol, date, tick_data)
         
@@ -186,11 +180,17 @@ def main():
     date = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime('%Y%m%d')
     logger.info(f"\n分析日期: {date}")
     
+    # 删除当天的所有数据，确保重新获取
+    logger.info(f"删除当天 {date} 的旧数据...")
+    storage.delete_date_data(date)
+    logger.info(f"当天旧数据已清空，开始重新获取数据")
+    
     # 分析所有股票
     results = []
     for symbol_info in symbols:
         symbol = symbol_info['code']
-        result = analyze_symbol(symbol, date, config, fetcher, preprocessor, storage, strategy)
+        name = symbol_info['name']
+        result = analyze_symbol(symbol, name, date, config, fetcher, preprocessor, storage, strategy)
         if result:
             results.append(result)
     
