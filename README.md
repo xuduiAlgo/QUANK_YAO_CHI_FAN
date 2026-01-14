@@ -120,8 +120,14 @@ moving_averages:
 ### 运行每日分析
 
 ```bash
-# 分析当天数据
+# 分析当天数据(仅命令行查看测试，不写进数据库)
 python scripts/run_daily_analysis.py
+# 获取沪深300和科创100的数据（写进数据库）
+python scripts/update_hs300_data.py
+python scripts/update_kc100_data.py
+# 分析沪深300和科创100的数据（写进数据库）
+python scripts/analyze_hs300.py
+python scripts/analyze_kc100.py
 
 # 分析指定日期
 python scripts/run_daily_analysis.py 20240101
@@ -444,15 +450,15 @@ symbols:
 - [x] CSV数据导出
 - [x] 配置文件管理
 
-### Phase 3: 性能优化
-- [ ] 异步处理优化
-- [ ] 数据库连接池
-- [ ] 缓存机制优化
-- [ ] 批处理优化
+### Phase 3: 性能优化 ✅
+- [x]异步处理优化
+- [x]数据库连接池
+- [x]缓存机制优化
+- [x] 批处理优化
 
 ### Phase 4: 高级功能
-- [ ] 实时监控
-- [ ] Web界面
+- [x]实时监控
+- [x] Web界面
 - [ ] API接口
 - [ ] 回测框架
 - [ ] 信号回测
